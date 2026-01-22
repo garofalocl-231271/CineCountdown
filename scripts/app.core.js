@@ -56,8 +56,8 @@ const programmazioneMock = {
       "Avatar": ["19:15", "21:00"],
       "Matrix": ["22:10"]
     },
-    "2026-01-19": {
-      "Matrix": ["17:55", "02:25"]
+    "2026-01-22": {
+      "Matrix": ["13:15", "02:25"]
     }
   }
 };
@@ -1119,3 +1119,4 @@ setInterval(() => {
 
 // --- AGGIORNA PULSANTE AL LOAD ---
 document.addEventListener("DOMContentLoaded", updateNotificationButton);
+
