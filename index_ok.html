@@ -1,22 +1,33 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>Film Time</title>
+<title>CineCountdown</title>
 
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#000000">
+<!-- BLOCCA INDICIZZAZIONE TEMPORANEA -->
+<meta name="robots" content="noindex, nofollow">
 
-  <!-- STYLES -->
-  <link rel="stylesheet" href="styles/styles.css">
+<!-- REDIRECT MANUTENZIONE -->
+<script>
+  window.location.replace("maintenance.html");
+</script>
+<noscript>
+  <meta http-equiv="refresh" content="0;url=maintenance.html">
+</noscript>
 
-  <!-- CORE APP -->
-  <script src="scripts/app.core.js" defer></script>
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#000000">
+
+<!-- STYLES -->
+<link rel="stylesheet" href="styles/styles.css">
+
+<!-- CORE APP -->
+<script src="scripts/app.core.js" defer></script>
+
 </head>
-
 <body>
 <div class="app">
 
