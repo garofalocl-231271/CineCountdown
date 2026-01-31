@@ -1,4 +1,6 @@
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 body {
   margin: 0;
@@ -9,14 +11,29 @@ body {
 }
 
 .app {
+  height: 100vh;
   display: flex;
   flex-direction: column;
 }
-  
-body, .app {
+
+body,
+.app {
   height: 100vh;
   height: 100dvh;
   height: var(--app-height);
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .sticky {
@@ -25,12 +42,31 @@ body, .app {
   z-index: 10;
 }
 
+.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #000;
+  pointer-events: auto;
+}
+
+.sticky {
+  display: flex;
+  flex-direction: column;
+}
+
 header {
   padding: 10px 12px;
   display: flex;
 }
 
-select, button {
+.multiplex {
+  padding: 10px 12px;
+  display: flex;
+}
+
+select,
+button {
   cursor: pointer;
   background: #1f1f1f;
   color: #fff;
@@ -45,7 +81,7 @@ select {
   width: clamp(220px, 70vw, 420px);
   margin-bottom: 10px;
 }
-  
+
 button:disabled {
   opacity: 0.35;
   cursor: not-allowed;
@@ -54,16 +90,22 @@ button:disabled {
   color: #777;
   filter: grayscale(0.6);
 }
-  
-.nav-btn.active {
-    background: #ff9800;
-    font-weight: bold;
-    border-color: aqua;
-    color: darkblue;
-    font-size: 15px;
-	box-shadow: 2px 4px 8px 0px #948801fc;
+
+button:hover {
+  background: #000;
+  color: aqua;
+  transition: background 0.2s ease, color 0.2s ease;
 }
-  
+
+.nav-btn.active {
+  background: #ff9800;
+  font-weight: bold;
+  border-color: aqua;
+  color: darkblue;
+  font-size: 15px;
+  box-shadow: 2px 4px 8px 0px #948801fc;
+}
+
 .nav-btn {
   transition: background 0.2s ease, color 0.2s ease;
 }
@@ -71,24 +113,49 @@ button:disabled {
 .filter-days-wrapper {
   transition: opacity 0.02s ease;
 }
-  
+
 .city-fav {
   cursor: pointer;
   font-size: 12px;
-  margin-left: -8px;
   margin-right: 5px;
 }
 
 .city-fav.active {
   color: #ff9800;
 }
-  
+
 .city-fav.disabled {
   opacity: 0.35;
   pointer-events: none;
   cursor: default;
 }
-  
+
+.city-fav:hover {
+  opacity: 0.35;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.multiplex-fav {
+  cursor: pointer;
+  font-size: 12px;
+  margin-right: 5px;
+}
+
+.multiplex-fav.active {
+  color: #ff9800;
+}
+
+.multiplex-fav.disabled {
+  opacity: 0.35;
+  pointer-events: none;
+  cursor: default;
+}
+
+.multiplex-fav:hover {
+  opacity: 0.35;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
 .preferiti-toolbar {
   display: flex;
   justify-content: flex-end;
@@ -105,7 +172,7 @@ button:disabled {
   align-items: center;
   color: aqua;
 }
-  
+
 .preferito-item.live {
   border-left: 5px solid #ff9800;
 }
@@ -123,7 +190,7 @@ button:disabled {
 
 .remove-single:hover {
   opacity: 0.7;
-  /*background: #dc2828;*/
+  background: #dc2828;
 }
 
 .view-preferiti .summary,
@@ -162,6 +229,7 @@ button:disabled {
 }
 
 .filter-data-list__button:hover {
+  background: #000;
   color: aqua;
 }
 
@@ -171,14 +239,6 @@ button:disabled {
   font-weight: bold;
   color: #0a0650;
   box-shadow: 5px 0px 8px 0px #948801fc;
-}
-
-.content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-  touch-action: pan-y;
-  -webkit-overflow-scrolling: touch;
 }
 
 .sessions__group-date {
@@ -217,6 +277,12 @@ button:disabled {
   box-shadow: 2px 4px 8px 0px #948801fc;
 }
 
+.sessions__list__item:hover {
+  background: #000;
+  color: aqua;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
 .session-time__start {
   font-size: 16px;
   font-weight: bold;
@@ -241,7 +307,6 @@ button:disabled {
 
 .summary-remove:hover {
   opacity: 0.7;
-  /*background: #dc2828;*/
 }
 
 .summary {
@@ -288,59 +353,78 @@ button:disabled {
   color: #f2e260;
 }
 
-.summary,.filter-days-wrapper {
+.summary,
+.filter-days-wrapper {
   transition: transform 0.25s ease, opacity 0.25s ease;
 }
-  
+
+.summary,
+.filter-days-wrapper {
+  display: flex;
+  flex-shrink: 0;
+}
+
 /* =====================
    SWIPE PRO LAYOUT
 ===================== */
-  
-.swipe-wrapper {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-}
-
-.swipe-track {
-  display: flex;
-  width: 200%;
-  height: 100%;
-  will-change: transform;
-  touch-action: none;
-}
-
-.swipe-track > .content {
-  width: 50%;
-  flex-shrink: 0;
-}
 
 .view-change {
   animation: tapFeedback 120ms ease;
 }
 
+.swipe-wrapper {
+  flex: 1;
+  overflow: hidden;
+}
+
+.swipe-track {
+  display: flex;
+  width: 200vw;
+  /* ← QUESTA è la chiave */
+  height: 100%;
+  will-change: transform;
+}
+
+.content {
+  flex: 0 0 100vw;
+  /* ogni vista è larga quanto lo schermo */
+  height: 100%;
+  overflow-y: auto;
+  padding: 12px;
+  touch-action: pan-y;
+}
+
 @keyframes tapFeedback {
-  0% { transform: scale(1); }
-  50% { transform: scale(0.985); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(0.985);
+  }
+
+  100% {
+    transform: scale(1);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-	* {
-		transition: none !important;
-		animation: none !important;
-	}
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }
-  
+
 /* =====================
    MODALE GENERICO
 ===================== */
-  
+
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.6);
-  display: none; /* nascosto di default */
+  background: rgba(0, 0, 0, 0.6);
+  display: none;
+  /* nascosto di default */
   align-items: center;
   justify-content: center;
   z-index: 1000;
@@ -375,7 +459,7 @@ button:disabled {
   background: #ff9800;
   color: #000;
 }
-  
+
 .modal.toast .modal-buttons {
   display: none;
 }
