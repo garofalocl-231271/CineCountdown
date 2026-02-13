@@ -1,9 +1,9 @@
-/*if ("serviceWorker" in navigator) {
+if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js")
     .then(() => console.log("SW registrato"))
     .catch(err => console.error("SW errore", err));
 }
-*/
+
 
 // --- VARIABILI GLOBALI ---
 let notificationsEnabled = false;         // flag globale
