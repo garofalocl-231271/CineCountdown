@@ -1,16 +1,9 @@
-const ENV = location.pathname.startsWith("/dev/") ? "dev" : "prod";
-
-const FLAGS = { DEBUG: ENV === "dev",
-				NOTIFICATIONS: true,
-				TEST_TOOLS: ENV === "dev",
-				LOGS: ENV === "dev"
-				};
-
-if ("serviceWorker" in navigator) {
+/*if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js")
     .then(() => console.log("SW registrato"))
     .catch(err => console.error("SW errore", err));
 }
+*/
 
 // --- VARIABILI GLOBALI ---
 let notificationsEnabled = false;         // flag globale
@@ -30,39 +23,54 @@ const filmDurations = {
   "Buen Camino": 90
 };
 
-const programmazioneMock = {
-  "The Space • Belpasso": {
-    "2026-01-13": {
-      "Avatar": ["20:30", "23:40","01:00","02:00","03:00","04:00"],
-      "Dune": ["21:15"]
-    },
-    "2026-01-14": {
-      "Avatar": ["18:30"]
-    },
-	"2026-01-15": {
-      "Matrix": ["1:00", "23:00"]
-    }
-  },
+function populateMultiplexSelect() {
+  multiplexSelect.innerHTML = "";
 
-  "The Space • Catania": {
-    "2026-01-13": {
-      "Avatar": ["19:15", "21:00"],
-      "Matrix": ["22:10"]
-    }
-  },
-
-  "The Space • Roma - Parco dei Medici": {
-  "2026-01-13": {
-      "Avatar": ["19:15", "21:00"],
-      "Matrix": ["22:10"]
-    },
-    "2026-01-22": {
-      "Matrix": ["13:15", "02:25"]
-    }
-  }
-};
+  CinemaAdapter.getMultiplexList().forEach(m => {
+    const opt = document.createElement("option");
+    opt.value = m.label;
+    opt.textContent = m.label;
+    multiplexSelect.appendChild(opt);
+  });
+}
 
 
+function getCurrentContext() {
+  const selectedCityOption = citySelect.selectedOptions[0];
+  if (!selectedCityOption) return null;
+
+  const cityId = selectedCityOption.dataset.id;
+  const multiplexId =
+    CinemaAdapter.getMultiplexIdFromUI(multiplexSelect.value);
+
+  if (!cityId || !multiplexId) return null;
+
+  return { multiplexId, cityId };
+}
+
+function ensureDefaultCinema() {
+  const saved = getDefaultCinema();
+
+  // Se già esiste, ok
+  if (saved) return;
+
+  // Altrimenti prendo prima option multiplex + città
+  const firstMultiplexId =
+    Object.keys(window.MockSource.programmazione)[0];
+
+  const firstCityId =
+    Object.keys(
+      window.MockSource.programmazione[firstMultiplexId]
+    )[0];
+
+  localStorage.setItem(
+    "defaultCinema",
+    JSON.stringify({
+      multiplexId: firstMultiplexId,
+      cityId: firstCityId
+    })
+  );
+}
 /* =======================
    STORAGE
 ======================= */
@@ -72,9 +80,50 @@ const getCityFav = () => localStorage.getItem("favCity");
 const setCityFav = c => localStorage.setItem("favCity", c);
 const cityCache = new Map();
 
+
+
 /* ================= STATE ================= */
 let activeDay = null;
 let currentView = "programmazione";
+
+function syncCitySelectByMultiplex(multiplexId) {
+  citySelect.innerHTML = "";
+
+  const cities =
+    CinemaAdapter.getCitiesByMultiplex(multiplexId);
+
+  if (!cities.length) {
+    citySelect.innerHTML =
+      `<option>Nessuna città disponibile</option>`;
+    return;
+  }
+
+  cities.forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c.label;      // UI
+    opt.textContent = c.label;
+    opt.dataset.id = c.id;   // 🔑 ID nascosto
+    citySelect.appendChild(opt);
+  });
+
+  const saved = getDefaultCinema();
+
+  if (
+    saved &&
+    saved.multiplexId === multiplexId
+  ) {
+    const match = cities.find(c => c.id === saved.cityId);
+    if (match) {
+      citySelect.value = match.label;
+      updateCitySelectStar();
+      return;
+    }
+  }
+
+  citySelect.selectedIndex = 0;
+  updateCitySelectStar();
+}
+
 
 /* =======================
    DATE UTILS
@@ -96,20 +145,20 @@ function startSummaryClock() {
 function formatGroupDate(d) {
   const date = new Date(d);
   const today = new Date();
-  today.setHours(0,0,0,0);
-  date.setHours(0,0,0,0);
+  today.setHours(0, 0, 0, 0);
+  date.setHours(0, 0, 0, 0);
   const diff = (date - today) / 86400000;
 
   if (diff === 0) return "OGGI";
   if (diff === 1) return "DOMANI";
-  return date.toLocaleDateString("it-IT",{weekday:"short", day:"numeric", month:"short"}).toUpperCase();
+  return date.toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" }).toUpperCase();
 }
 
-function addMinutes(time,minutes) {
-  const [h,m] = time.split(":").map(Number);
+function addMinutes(time, minutes) {
+  const [h, m] = time.split(":").map(Number);
   const d = new Date();
   d.setHours(h, m + minutes, 0, 0);
-  return d.toTimeString().slice(0,5);
+  return d.toTimeString().slice(0, 5);
 }
 
 function filmDurationLabel(min) {
@@ -117,9 +166,9 @@ function filmDurationLabel(min) {
   const m = min % 60;
   return `${h}h ${m}m`;
 }
-  
+
 function getSessionDateTime(day, time) {
-  const [h,m] = time.split(":").map(Number);
+  const [h, m] = time.split(":").map(Number);
   const d = new Date(day);
   d.setHours(h, m, 0, 0);
   return d;
@@ -128,9 +177,9 @@ function getSessionDateTime(day, time) {
 function formatCountdown(ms) {
   if (ms <= 0) return "INIZIATO";
   const s = Math.floor(ms / 1000);
-  const h = String(Math.floor(s / 3600)).padStart(2,"0");
-  const m = String(Math.floor((s % 3600) / 60)).padStart(2,"0");
-  const sec = String(s % 60).padStart(2,"0");
+  const h = String(Math.floor(s / 3600)).padStart(2, "0");
+  const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+  const sec = String(s % 60).padStart(2, "0");
   return `${h}:${m}:${sec}`;
 }
 
@@ -157,7 +206,7 @@ setAppHeight();
    DAYS
 ======================= */
 const daysWrapper = document.querySelector(".filter-days-wrapper");
-  
+
 function hideDays() {
   daysWrapper.style.opacity = 0;
   setTimeout(() => daysWrapper.style.display = "none", 1);
@@ -172,8 +221,10 @@ function generateDays() {
   daysList.innerHTML = "";
   activeDay = null;
 
-  const city = citySelect.value;
-  const data = getProgrammazione(city);
+  const ctx = getCurrentContext();
+  if (!ctx) return;
+
+  const data = CinemaAdapter.getProgrammazioneByCityId(ctx.multiplexId, ctx.cityId);
   const days = Object.keys(data);
 
   if (!days.length) {
@@ -201,64 +252,77 @@ function generateDays() {
   daysList.appendChild(allLi);
 
   /* ===== GIORNI SINGOLI ===== */
-  days.forEach((day, i) => {
-    const btn = document.createElement("button");
-    btn.className = "filter-data-list__button";
-    btn.textContent = formatGroupDate(day);
+days.forEach((day, i) => {
+  const btn = document.createElement("button");
+  btn.className = "filter-data-list__button";
+  btn.textContent = formatGroupDate(day);
 
+  const dayData = data[day];
+  const isClosed = !dayData || Object.keys(dayData).length === 0;
+
+  if (isClosed) {
+    btn.classList.add("disabled");
+  } else {
     btn.onclick = () => {
       document.querySelectorAll(".filter-data-list__button")
         .forEach(b => b.classList.remove("active"));
+
       btn.classList.add("active");
       activeDay = day;
       renderProgrammazione();
       renderSummary();
     };
+  }
 
-    const li = document.createElement("li");
-    li.appendChild(btn);
-    daysList.appendChild(li);
+  const li = document.createElement("li");
+  li.appendChild(btn);
+  daysList.appendChild(li);
 
-    if (i === 0) {
-      btn.classList.add("active");
-      activeDay = day;
-    }
-  });
+  // primo giorno valido diventa attivo
+  if (!isClosed && activeDay === null) {
+    btn.classList.add("active");
+    activeDay = day;
+  }
+});
+
 }
 
 /* =======================
    PROGRAMMAZIONE
 ======================= */
-function getProgrammazione(city) {
-  return cityCache.get(city) || programmazioneMock[city] || {};
-}
-
-function preloadCity(city) {
-  if (cityCache.has(city)) {
-    return Promise.resolve(cityCache.get(city));
-  }
-
-  return new Promise(resolve => {
-    setTimeout(() => {
-      const data = getProgrammazione(city); // oggi mock
-      cityCache.set(city, data);
-      resolve(data);
-    }, 200);
+function sortTimes(times) {
+  return [...times].sort((a, b) => {
+    const [h1, m1] = a.split(":").map(Number);
+    const [h2, m2] = b.split(":").map(Number);
+    return h1 * 60 + m1 - (h2 * 60 + m2);
   });
 }
 
 function renderProgrammazione() {
   programmazione.innerHTML = "";
-  const city = citySelect.value;
-  const cityData = getProgrammazione(city);
+
+  const ctx = getCurrentContext();
+  if (!ctx) return;
+
+  const { multiplexId, cityId } = ctx;
+
+  const cityData =
+    CinemaAdapter.getProgrammazioneByCityId(
+      multiplexId,
+      cityId
+    );
 
   if (!activeDay) return;
 
   const daysToRender =
-    activeDay === "ALL"
-      ? Object.keys(cityData)
-      : [activeDay];
-  
+  activeDay === "ALL"
+    ? Object.keys(cityData).filter(day => {
+        const d = cityData[day];
+        return d && Object.keys(d).length > 0;
+      })
+    : [activeDay];
+
+
   daysToRender.forEach(day => {
     const data = cityData[day];
     if (!data) return;
@@ -268,46 +332,54 @@ function renderProgrammazione() {
     dayTitle.textContent = formatGroupDate(day);
     programmazione.appendChild(dayTitle);
 
-  Object.entries(data).forEach(([film, times]) => {
-    const dur = filmDurations[film] || 0;
-    const filmDiv = document.createElement("div");
-    filmDiv.className = "film";
-    filmDiv.innerHTML = `🎬 ${film} • ${filmDurationLabel(dur)}`;
+    Object.entries(data).forEach(([film, times]) => {
 
-    const ul = document.createElement("ul");
-    ul.className = "sessions__list";
+      const dur = filmDurations[film] || 0;
 
-    times.forEach(start => {
-  const end = addMinutes(start, dur + PUBBLICITA_MINUTI);
-  const li = document.createElement("li");
-  li.className = "sessions__list__item";
+      const filmDiv = document.createElement("div");
+      filmDiv.className = "film";
+      filmDiv.innerHTML =
+        `🎬 ${film} • ${filmDurationLabel(dur)}`;
 
-  li.dataset.day = day;
+      const ul = document.createElement("ul");
+      ul.className = "sessions__list";
 
-  li.innerHTML = `
-    <span class="session-time__start">${start}</span>
-    <span class="session-time__end">${end}</span>
-  `;
+      sortTimes(times).forEach(start => {
 
-  const active = getFavs().some(f =>
-    f.city === city &&
-    f.day === day &&
-    f.film === film &&
-    f.time === start
-  );
+        const end =
+          addMinutes(start, dur + PUBBLICITA_MINUTI);
 
-  if (active) li.classList.add("active");
+        const li = document.createElement("li");
+        li.className = "sessions__list__item";
+        li.dataset.day = day;
 
-  li.onclick = () => toggleTime(film, start, li);
+        li.innerHTML = `
+          <span class="session-time__start">${start}</span>
+          <span class="session-time__end">${end}</span>
+        `;
 
-  ul.appendChild(li);
-});
+        const active = getFavs().some(f =>
+          f.multiplexId === multiplexId &&
+          f.cityId === cityId &&
+          f.day === day &&
+          f.film === film &&
+          f.time === start
+        );
 
-    filmDiv.appendChild(ul);
-    programmazione.appendChild(filmDiv);
-  });
+        if (active) li.classList.add("active");
+
+        li.onclick = () =>
+          toggleTime(film, start, li);
+
+        ul.appendChild(li);
+      });
+
+      filmDiv.appendChild(ul);
+      programmazione.appendChild(filmDiv);
+    });
   });
 }
+
 
 /* =======================
    PREFERITI
@@ -321,94 +393,137 @@ function renderPreferitiSafe() {
 }
 
 function renderPreferiti() {
-  //sanitizeFavorites();
-
   const list = document.getElementById("preferitiList");
   list.innerHTML = "";
 
-  const city = citySelect.value;
+  const selectedCityOption = citySelect.selectedOptions[0];
+  if (!selectedCityOption) return;
+
+  const cityId = selectedCityOption.dataset.id;
+  const multiplexId =
+    CinemaAdapter.getMultiplexIdFromUI(multiplexSelect.value);
+
   const favs = sortFavoritesByDateTime(
-  getFavs().filter(f => f.city === city)
-).slice(0, 3);
+    getFavs().filter(f =>
+      f.multiplexId === multiplexId &&
+      f.cityId === cityId
+    )
+  ).slice(0, 3);
 
   if (!favs.length) {
     list.innerHTML = "⭐ Nessun preferito";
     return;
   }
 
-  favs
-    .sort((a,b) =>
-      getSessionDateTime(a.day,a.time) -
-      getSessionDateTime(b.day,b.time)
-    )
-    .forEach(f => {
-      const start = getSessionDateTime(f.day, f.time);
-      const now = new Date();
-      const diff = start - now;
+  favs.forEach(f => {
+    const div = document.createElement("div");
+    div.className = "sessions__list__item preferito-item";
 
-      const div = document.createElement("div");
-      div.className = "sessions__list__item preferito-item";
+    div.innerHTML = `
+      <div class="preferito-header">
+        <strong>${formatGroupDate(f.day)}</strong>
+        <button class="remove-single">🗑️</button>
+      </div>
 
-      div.innerHTML = `
-        <div class="preferito-header">
-          <strong>${formatGroupDate(f.day)}</strong>
-          <button class="remove-single">🗑️</button>
-        </div>
-
-        🎬 ${f.film} – ${f.time}<br>
-        ⏱️<span class="countdown"
-      data-day="${f.day}"
-      data-time="${f.time}"
-      data-film="${f.film}">
+      🎬 ${f.film} – ${f.time}<br>
+      ⏱️<span class="countdown"
+        data-day="${f.day}"
+        data-time="${f.time}"
+        data-film="${f.film}">
       </span>
-      `;
+    `;
 
-      if (diff <= 0) div.classList.add("expired");
+    div.querySelector(".remove-single").onclick = () => {
+      removeFavoriteByData(
+        f.multiplexId,
+        f.cityId,
+        f.day,
+        f.film,
+        f.time
+      );
+    };
 
-      // 🗑️ rimuovi singolo
-      div.querySelector(".remove-single").onclick = () => {
-        removeSingleFavorite(f);
-      };
+    list.appendChild(div);
+  });
 
-      list.appendChild(div);
-    });
-  document.querySelectorAll(".countdown").forEach(el => {
-  const { day, time, film } = el.dataset;
-  const s = getSessionStatus(day, time, film);
-  syncSessionVisualState(el, s);
-});
+  syncAllCountdownStates();
 }
-  
+
 function setActiveView(view) {
   btnProgrammazione.classList.toggle("active", view === "programmazione");
   btnPreferiti.classList.toggle("active", view === "preferiti");
 }
 
+function updateFavoritesCounter() {
+  const countDisplay = document.getElementById("count-item");
+  if (!countDisplay) return;
+
+  const ctx = getCurrentContext();
+  if (!ctx) {
+    countDisplay.textContent = "0";
+    return;
+  }
+
+  const { multiplexId, cityId } = ctx;
+
+  const count = getFavs().filter(f =>
+    f.multiplexId === multiplexId &&
+    f.cityId === cityId
+  ).length;
+
+  countDisplay.textContent = ` • ${count}`;
+  countDisplay.classList.toggle("visible", count > 0);
+  countDisplay.classList.add("pop");
+  setTimeout(() => countDisplay.classList.remove("pop"), 200);
+
+
+}
+
 /* =======================
    TOGGLE
 ======================= */
-  function toggleTime(film, time, el) {
-  const city = citySelect.value;
+function toggleTime(film, time, el) {
+  const selectedCityOption = citySelect.selectedOptions[0];
+  if (!selectedCityOption) return;
+
+  const cityId = selectedCityOption.dataset.id;
+  const multiplexLabel = multiplexSelect.value;
+  const multiplexId =
+    CinemaAdapter.getMultiplexIdFromUI(multiplexLabel);
+
+  const day = el.dataset.day;
+
   let favs = getFavs();
-  const realDay = el.dataset.day;
 
   const idx = favs.findIndex(f =>
-    f.city === city &&
-    f.day === realDay &&
+    f.multiplexId === multiplexId &&
+    f.cityId === cityId &&
+    f.day === day &&
     f.film === film &&
     f.time === time
   );
 
   // ➕ AGGIUNTA
   if (idx === -1) {
-    const cityFavsCount = favs.filter(f => f.city === city).length;
+
+    const cityFavsCount = favs.filter(f =>
+      f.multiplexId === multiplexId &&
+      f.cityId === cityId
+    ).length;
 
     if (cityFavsCount >= 3) {
-      showToast("⏱️ Puoi aggiungere al massimo 3 orari per questa città", 2500);
+      showToast("⏱️ Max 3 orari per questa città", 2500);
       return;
     }
 
-    favs.push({ city, day: realDay, film, time });
+    favs.push({
+      multiplexId,
+      cityId,
+      day,
+      film,
+      time
+    });
+
     el.classList.add("active");
   }
   // ➖ RIMOZIONE
@@ -418,19 +533,30 @@ function setActiveView(view) {
   }
 
   saveFavs(favs);
-  
+
   renderSummary();
   renderPreferiti();
   updateClearButtons();
+  updateFavoritesCounter();
 }
+
 
 /* =======================
    SUMMARY
 ======================= */
 function renderSummary() {
-  const city = citySelect.value;
+  const selectedCityOption = citySelect.selectedOptions[0];
+  if (!selectedCityOption) return;
+
+  const cityId = selectedCityOption.dataset.id;
+  const multiplexId =
+    CinemaAdapter.getMultiplexIdFromUI(multiplexSelect.value);
+
   const favs = sortFavoritesByDateTime(
-    getFavs().filter(f => f.city === city)
+    getFavs().filter(f =>
+      f.multiplexId === multiplexId &&
+      f.cityId === cityId
+    )
   ).slice(0, 3);
 
   programSummary.innerHTML = favs.length
@@ -450,7 +576,8 @@ function renderSummary() {
 
           <button
             class="summary-remove"
-            data-city="${f.city}"
+            data-multiplex="${f.multiplexId}"
+            data-city="${f.cityId}"
             data-day="${f.day}"
             data-film="${f.film}"
             data-time="${f.time}">
@@ -461,24 +588,45 @@ function renderSummary() {
     `).join("")
     : "Nessun orario selezionato";
 
-  updateSummaryStatuses(); // 🔑 SOLO dopo aver creato il DOM
+  updateSummaryStatuses();
 }
+
 
 programSummary.addEventListener("click", e => {
   const btn = e.target.closest(".summary-remove");
   if (!btn) return;
 
-  const { city, day, film, time } = btn.dataset;
+  const {
+    multiplex,
+    city,
+    day,
+    film,
+    time
+  } = btn.dataset;
 
-  removeFavoriteByData(city, day, film, time);
+  removeFavoriteByData(
+    multiplex,
+    city,
+    day,
+    film,
+    time
+  );
 });
 
-function removeFavoriteByData(city, day, film, time) {
+
+function removeFavoriteByData(
+  multiplexId,
+  cityId,
+  day,
+  film,
+  time
+) {
   let favs = getFavs();
 
   favs = favs.filter(f =>
     !(
-      f.city === city &&
+      f.multiplexId === multiplexId &&
+      f.cityId === cityId &&
       f.day === day &&
       f.film === film &&
       f.time === time
@@ -488,13 +636,14 @@ function removeFavoriteByData(city, day, film, time) {
   saveFavs(favs);
 
   renderSummary();
-  renderPreferitiSafe();
+  renderPreferiti();
   renderProgrammazione();
   updateClearButtons();
   syncAllCountdownStates();
+  updateFavoritesCounter();
   scheduledNotificationKey = null;
-
 }
+
 
 function syncAllCountdownStates() {
   document.querySelectorAll(".countdown").forEach(el => {
@@ -558,68 +707,130 @@ function getSummaryStatus(day, time, film) {
 /* =======================
    CITY-FAVORITE/FAVORITE
 ======================= */
-const DEFAULT_CITY_KEY = "defaultCity";
-function setDefaultCity(city) {
-  localStorage.setItem(DEFAULT_CITY_KEY, city);
+const DEFAULT_CINEMA_KEY = "defaultCinema";
+
+function setDefaultCinema(multiplexId, cityId) {
+  const payload = {
+    multiplexId,
+    cityId
+  };
+
+  localStorage.setItem(
+    DEFAULT_CINEMA_KEY,
+    JSON.stringify(payload)
+  );
+
   updateCitySelectStar();
-  showToast(`⭐ ${city} impostata come città predefinita`);
 }
 
-function getDefaultCity() {
-  return localStorage.getItem(DEFAULT_CITY_KEY);
+function getDefaultCinema() {
+  const raw = localStorage.getItem(DEFAULT_CINEMA_KEY);
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 function updateCitySelectStar() {
-  const defaultCity = getDefaultCity();
+  const saved = getDefaultCinema();
+  const ctx = getCurrentContext();
 
-  Array.from(citySelect.options).forEach(option => {
-    const cleanName = option.value.replace(" ⭐", "");
-    option.value = cleanName;
-    option.textContent = cleanName;
+  if (!saved || !ctx) {
+    cityFav.classList.remove("disabled");
+    return;
+  }
 
-    if (cleanName === defaultCity) {
-      option.textContent = `${cleanName} ⭐`;
+  const isDefault =
+    saved.cityId === ctx.cityId &&
+    saved.multiplexId === ctx.multiplexId;
+
+  cityFav.classList.toggle("disabled", isDefault);
+}
+
+function updateCityOptionsStar() {
+  const saved = getDefaultCinema();
+  if (!saved) return;
+
+  Array.from(citySelect.options).forEach(opt => {
+    const cityId = opt.dataset.id;
+    const multiplexId =
+      CinemaAdapter.getMultiplexIdFromUI(multiplexSelect.value);
+
+    // reset testo originale usando label dal mock
+    const cityData =
+      window.MockSource.cities?.[cityId];
+
+    if (!cityData) return;
+
+    const baseLabel = cityData.label;
+
+    opt.textContent = baseLabel;
+
+    if (
+      saved.cityId === cityId &&
+      saved.multiplexId === multiplexId
+    ) {
+      opt.textContent = baseLabel + " ⭐";
     }
   });
 }
 
-function syncCityFavIcon() {
-  const selectedCity = citySelect.value.replace(" ⭐", "");
-  const defaultCity = getDefaultCity();
-
-  const isDefault = selectedCity === defaultCity;
-
-  cityFav.classList.toggle("active", isDefault);
-  cityFav.classList.toggle("disabled", isDefault);
-}
-
 function syncUIState() {
   updateCitySelectStar();
-  syncCityFavIcon();
   updateClearButtons();
 }
 
+function getCityDisplayName(multiplexId, cityId) {
+  const city = CinemaAdapter.getCityById(cityId);
+  const multiplex = CinemaAdapter.getMultiplexById(multiplexId);
+
+  if (!city || !multiplex) return cityId;
+
+  return `- ${multiplex.shortLabel} • ${city.label} -`;
+}
+
+
+
 cityFav.onclick = () => {
-  const city = citySelect.value.replace(" ⭐", "");
-  setDefaultCity(city);
-  syncUIState();
+  const ctx = getCurrentContext();
+  if (!ctx) return;
+
+  const { multiplexId, cityId } = ctx;
+
+  setDefaultCinema(multiplexId, cityId);
+
+  showToast(
+    `⭐ ${getCityDisplayName(multiplexId, cityId)} impostata come città predefinita`
+  );
+
+  updateCityOptionsStar();
 };
-  
 
 
 function syncSessionVisualState(el, status) {
   const item = el.closest(".preferito-item");
   if (!item) return;
-
+  item.classList.toggle("upcoming", status.state === "upcoming");
   item.classList.toggle("live", status.state === "live");
   item.classList.toggle("expired", status.state === "ended");
 }
 
 function updateClearButtons() {
   const favs = getFavs();
-  const city = citySelect.value.replace(" ⭐", "");
+  const ctx = getCurrentContext();
 
-  const hasCityFavs = favs.some(f => f.city === city);
+  if (!ctx) return;
+
+  const { multiplexId, cityId } = ctx;
+
+  const hasCityFavs = favs.some(f =>
+    f.multiplexId === multiplexId &&
+    f.cityId === cityId
+  );
+
   const hasAnyFavs = favs.length > 0;
 
   btnClearCityFavs.disabled = !hasCityFavs;
@@ -628,22 +839,32 @@ function updateClearButtons() {
   btnClearCityFavs.classList.toggle("disabled", !hasCityFavs);
   btnClearAllFavs.classList.toggle("disabled", !hasAnyFavs);
 }
-  
-document.getElementById("btnClearCityFavs").onclick = async () => {
-  const city = citySelect.value;
+
+btnClearCityFavs.onclick = async () => {
+  const ctx = getCurrentContext();
+  if (!ctx) return;
 
   const confirmed = await showModal(
-    `Eliminare i preferiti di ${city}?`
+    "Eliminare i preferiti di questa città?"
   );
   if (!confirmed) return;
 
-  let favs = getFavs().filter(f => f.city !== city);
+  let favs = getFavs();
+
+  favs = favs.filter(f =>
+    !(
+      f.multiplexId === ctx.multiplexId &&
+      f.cityId === ctx.cityId
+    )
+  );
+
   saveFavs(favs);
 
-  renderPreferiti();
   renderProgrammazione();
+  renderPreferiti();
   renderSummary();
   updateClearButtons();
+  updateFavoritesCounter();
 };
 
 document.getElementById("btnClearAllFavs").onclick = async () => {
@@ -657,6 +878,7 @@ document.getElementById("btnClearAllFavs").onclick = async () => {
   renderPreferiti();
   renderSummary();
   updateClearButtons();
+  updateFavoritesCounter();
 };
 
 function removeSingleFavorite(fav) {
@@ -664,7 +886,8 @@ function removeSingleFavorite(fav) {
 
   favs = favs.filter(f =>
     !(
-      f.city === fav.city &&
+      f.multiplexId === fav.multiplexId &&
+      f.cityId === fav.cityId &&
       f.day === fav.day &&
       f.film === fav.film &&
       f.time === fav.time
@@ -672,20 +895,25 @@ function removeSingleFavorite(fav) {
   );
 
   saveFavs(favs);
-  
   renderProgrammazione();
   renderPreferiti();
   renderSummary();
   updateClearButtons();
+  updateFavoritesCounter();
 }
-
 
 function sanitizeFavorites() {
   let favs = getFavs();
   const validFavs = [];
 
   favs.forEach(f => {
-    const dayData = programmazioneMock[f.city]?.[f.day];
+    const cityData =
+      window.MockSource.programmazione
+      ?.[f.multiplexId]
+      ?.[f.cityId];
+
+    const dayData = cityData?.[f.day];
+
     if (dayData?.[f.film]?.includes(f.time)) {
       validFavs.push(f);
     }
@@ -695,6 +923,7 @@ function sanitizeFavorites() {
     saveFavs(validFavs);
   }
 }
+
 
 /* ================= VIEW ================= */
 btnProgrammazione.onclick = goProgrammazione;
@@ -928,50 +1157,71 @@ function formatAdvancedCountdown(day, time, film) {
 /* =======================
    INIT
 ======================= */
- 
+
 startSummaryClock();
 setActiveView("programmazione");
 
 citySelect.onchange = async () => {
   sanitizeFavorites();
-  updateCitySelectStar();
-  syncUIState();
-
-  await preloadCity(citySelect.value);
-
   generateDays();
   renderProgrammazione();
   renderPreferiti();
   renderSummary();
-  updateClearButtons();
   syncUIState();
-  
+  updateCityOptionsStar();
+  updateFavoritesCounter();
 };
 
-  
+multiplexSelect.onchange = async () => {
+  const multiplexLabel = multiplexSelect.value;
+  const multiplexId = CinemaAdapter.getMultiplexIdFromUI(multiplexLabel);
+
+  syncCitySelectByMultiplex(multiplexId);
+  sanitizeFavorites();
+  generateDays();
+  renderProgrammazione();
+  renderPreferiti();
+  renderSummary();
+  syncUIState();
+  updateCityOptionsStar();
+  updateFavoritesCounter();
+};
+
 document.addEventListener("DOMContentLoaded", async () => {
+
   sanitizeFavorites();
 
-  const defaultCity = getDefaultCity();
-  if (defaultCity) {
-    citySelect.value = defaultCity;
-  }
+  // 1️⃣ Popola multiplex
+  populateMultiplexSelect();
+
+  // 2️⃣ Garantisce defaultCinema
+  ensureDefaultCinema();
+
+  const saved = getDefaultCinema();
+
+  // 3️⃣ Applica multiplex
+  const multiplex =
+    CinemaAdapter.getMultiplexById(saved.multiplexId);
+
+  multiplexSelect.value = multiplex.label;
+
+  // 4️⃣ Popola città del multiplex
+  syncCitySelectByMultiplex(saved.multiplexId);
+
+  // 5️⃣ Seleziona città default
+  const opt = Array.from(citySelect.options)
+    .find(o => o.dataset.id === saved.cityId);
+
+  if (opt) citySelect.value = opt.value;
 
   updateCitySelectStar();
-  syncUIState();
-
-  await preloadCity(citySelect.value);
-
+  updateCityOptionsStar();
   generateDays();
   renderProgrammazione();
   renderSummary();
+  renderPreferiti();
   updateClearButtons();
-  
-  
-
-  if (currentView === "preferiti") {
-    renderPreferiti();
-  }
+  updateFavoritesCounter();
 });
 
 /* =======================
@@ -1119,4 +1369,3 @@ setInterval(() => {
 
 // --- AGGIORNA PULSANTE AL LOAD ---
 document.addEventListener("DOMContentLoaded", updateNotificationButton);
-
